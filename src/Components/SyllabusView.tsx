@@ -24,6 +24,7 @@ import {
   InputLabel,
   ListItem,
   MenuItem,
+  Modal,
   Select,
   SelectChangeEvent,
   Stack
@@ -33,12 +34,26 @@ import {useEffect, useState} from "react";
 import {User} from "../Models/User";
 import TextField from "@mui/material/TextField";
 import {useNavigate, useParams} from "react-router-dom";
+import Link from "@mui/material/Link";
 
 const drawerWidth: number = 240;
 
 interface AppBarProps extends MuiAppBarProps {
   open?: boolean;
 }
+
+const modalStyle = {
+  position: 'absolute',
+  top: '50%',
+  left: '50%',
+  transform: 'translate(-50%, -50%)',
+  width: 400,
+  bgcolor: 'background.paper',
+  border: '2px solid #000',
+  boxShadow: 24,
+  p: 4,
+};
+
 
 const AppBar = styled(MuiAppBar, {shouldForwardProp: (prop) => prop !== 'open',})<AppBarProps>(({theme, open}) => ({
   zIndex: theme.zIndex.drawer + 1,
@@ -83,6 +98,52 @@ export default function SyllabusView() {
   const [open, setOpen] = useState(true);
   const [syllabus, setSyllabus] = useState<Syllabus>(new Syllabus());
   let { pk } = useParams();
+  const [modalOpen, setModalOpen] = React.useState(false);
+  const handleModalOpen = () => setModalOpen(true);
+  const handleModalClose = () => setModalOpen(false);
+  const [password, setPassword] = useState('');
+  const [file, setFile] = useState<File>();
+  let navigate = useNavigate();
+
+  const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!!file) {
+      const base64 = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.readAsDataURL(file);
+        // @ts-ignore
+        reader.onload = () => resolve(reader.result.toString().split(',')[1]);
+        reader.onerror = (error) => reject(error);
+      });
+      console.log(base64)
+      try {
+        const response = await fetch(`http://127.0.0.1:8000/api/v1.0/syllabus/sign/${syllabus.id}/`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json;',
+            'Authorization': 'Bearer ' + localStorage.getItem('token')
+          },
+          body: JSON.stringify({
+            keystore: base64,
+            password: password
+          }),
+        });
+
+        let file = await response.blob()
+        var csvURL = window.URL.createObjectURL(file);
+        let tempLink = document.createElement('a');
+        tempLink.href = csvURL;
+        tempLink.setAttribute('download', `sign_${pk}.sign`);
+        tempLink.click();
+        window.location.reload();
+
+      } catch (e) {
+        alert("Не правильный пароль или подпись")
+        console.log("error", e);
+      }
+
+    }
+  };
 
   useEffect(() => {
     const fetchSyllabus = async () => {
@@ -137,7 +198,11 @@ export default function SyllabusView() {
       console.log(err)
     }
   }
+  async function signDocx(){
 
+  }
+
+  // @ts-ignore
   // @ts-ignore
   return (
     <ThemeProvider theme={mdTheme}>
@@ -361,10 +426,32 @@ export default function SyllabusView() {
               {/*APPROVERS END*/}
 
               <Grid container justifyContent="flex-end" sx={{mt:2}} spacing={3}>
+                <Button variant="contained" size="medium" sx={{m:1}} onClick={()=>handleModalOpen()}>
+                  Подписать
+                </Button>
                 <Button variant="outlined" size="medium" sx={{m:1}} onClick={()=>generateDocx()}>
                   Скачать документ
                 </Button>
               </Grid>
+
+              <Modal
+                open={modalOpen}
+                onClose={handleModalClose}
+                aria-labelledby="modal-modal-title"
+                aria-describedby="modal-modal-description"
+              >
+                <Box component="form" onSubmit={handleSubmit} noValidate sx={modalStyle}>
+                  <input required style={{display: 'none'}} id="raised-button-file" type="file" name="file"
+                         onChange={(event) => {
+                           if (!!event.target.files) {setFile(event.target.files[0]);}}}/>
+                  <label htmlFor="raised-button-file">
+                    <Button fullWidth variant="outlined" component="span" sx={{mt: 1}}>Выбрать файл подписи </Button>
+                  </label>
+                  <TextField margin="normal" required fullWidth name="password" label="Пароль" type="password" size="small"
+                             onChange={(value) => setPassword(value.target.value)}/>
+                  <Button type="submit" fullWidth variant="contained" sx={{mt: 2, mb: 2}}>Подписать</Button>
+                </Box>
+              </Modal>
 
             </Grid>
           </Container>
